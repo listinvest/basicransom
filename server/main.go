@@ -29,4 +29,6 @@ func main() {
             return
         }
     }).Methods("GET")
+
+    http.ListenAndServe(":8081", r)
 }
